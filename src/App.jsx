@@ -9,7 +9,10 @@ import InstructionsSection from './components/InstructionsSection'
 
 export default function App() {
   const [arista, setArista] = useState(5)
-  const [showParts, setShowParts] = useState(false)
+  const [activeParts, setActiveParts] = useState({
+    cara: false, arista: false, vertice: false,
+    base: false, altura: false, diagonal: false,
+  })
   const [cubeMode, setCubeMode] = useState('assembled')
   const [waterLevel, setWaterLevel] = useState(0)
   const [isFillingWater, setIsFillingWater] = useState(false)
@@ -98,10 +101,14 @@ export default function App() {
     setCubeMode(mode)
   }
 
+  const togglePart = (key) => {
+    setActiveParts(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
   const resetSimulation = () => {
     stopWaterAnimation()
     setArista(5)
-    setShowParts(false)
+    setActiveParts({ cara: false, arista: false, vertice: false, base: false, altura: false, diagonal: false })
     setCubeMode('assembled')
     setWaterLevel(0)
   }
@@ -127,7 +134,7 @@ export default function App() {
             <span className="canvas-label">Laboratorio 3D</span>
             <CubeScene
               arista={arista}
-              showParts={showParts}
+              activeParts={activeParts}
               cubeMode={cubeMode}
               waterLevel={waterLevel}
             />
@@ -148,8 +155,8 @@ export default function App() {
             <CubeControls
               arista={arista}
               setArista={setArista}
-              showParts={showParts}
-              setShowParts={setShowParts}
+              activeParts={activeParts}
+              togglePart={togglePart}
               cubeMode={cubeMode}
               setCubeMode={handleSetCubeMode}
               waterLevel={waterLevel}

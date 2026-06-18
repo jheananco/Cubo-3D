@@ -309,8 +309,9 @@ function CubeFaces({ size, mode }) {
 /* ══════════════════════════════════════════════════
    AssembledCube
    ══════════════════════════════════════════════════ */
-function AssembledCube({ size, waterLevel, showParts, visible }) {
-  const hasWater = waterLevel > 0.001
+function AssembledCube({ size, waterLevel, activeParts, visible }) {
+  const hasWater     = waterLevel > 0.001
+  const anyPartActive = activeParts && Object.values(activeParts).some(Boolean)
   return (
     <group visible={visible}>
       <mesh castShadow receiveShadow>
@@ -326,7 +327,7 @@ function AssembledCube({ size, waterLevel, showParts, visible }) {
         <Edges scale={1.001} threshold={15} color="#7dd3fc" lineWidth={1.5} />
       </mesh>
       {hasWater && <WaterMesh size={size} level={waterLevel} />}
-      {showParts && <PartsLabels size={size} />}
+      {anyPartActive && <PartsLabels size={size} activeParts={activeParts} />}
     </group>
   )
 }
@@ -366,31 +367,33 @@ function WaterMesh({ size, level }) {
 /* ══════════════════════════════════════════════════
    PartsLabels
    ══════════════════════════════════════════════════ */
-function PartsLabels({ size }) {
+function PartsLabels({ size, activeParts }) {
   const s = size
-  const labels = [
-    { pos: [0,          0,           s*0.72], text: 'Cara',       color: '#60a5fa', sub: '6 caras iguales' },
-    { pos: [s*0.70,     s*0.55,      0     ], text: 'Arista',     color: '#34d399', sub: '12 aristas' },
-    { pos: [s*0.62,     s*0.62,      s*0.62], text: 'Vértice',   color: '#f472b6', sub: '8 vértices' },
-    { pos: [0,         -s*0.74,      0     ], text: 'Base',       color: '#a78bfa', sub: 'Cara inferior' },
-    { pos: [s*0.74,     0,           0     ], text: 'Altura = a', color: '#fb923c', sub: `${(s*5).toFixed(1)} cm` },
-    { pos: [-s*0.55,    s*0.55,     -s*0.55], text: 'Diagonal',  color: '#fbbf24', sub: 'a√3' },
+  const ALL_LABELS = [
+    { key: 'cara',     pos: [0,       0,       s*0.72], text: 'Cara',       color: '#60a5fa', sub: '6 caras iguales'  },
+    { key: 'arista',   pos: [s*0.70,  s*0.55,  0     ], text: 'Arista',     color: '#34d399', sub: '12 aristas'       },
+    { key: 'vertice',  pos: [s*0.62,  s*0.62,  s*0.62], text: 'Vértice',   color: '#f472b6', sub: '8 vértices'       },
+    { key: 'base',     pos: [0,      -s*0.74,  0     ], text: 'Base',       color: '#a78bfa', sub: 'Cara inferior'    },
+    { key: 'altura',   pos: [s*0.74,  0,       0     ], text: 'Altura = a', color: '#fb923c', sub: `${(s*5).toFixed(1)} cm` },
+    { key: 'diagonal', pos: [-s*0.55, s*0.55, -s*0.55], text: 'Diagonal',  color: '#fbbf24', sub: 'a√3'             },
   ]
+  const visible = ALL_LABELS.filter(l => activeParts[l.key])
   return (
     <>
-      {labels.map((l, idx) => (
-        <Html key={idx} position={l.pos} center style={{ pointerEvents: 'none' }}>
+      {visible.map(l => (
+        <Html key={l.key} position={l.pos} center style={{ pointerEvents: 'none' }}>
           <div style={{
-            background: 'rgba(6,11,24,0.90)',
-            border: `1px solid ${l.color}55`,
+            background: 'rgba(6,11,24,0.92)',
+            border: `1.5px solid ${l.color}77`,
             borderRadius: 6,
-            padding: '4px 10px',
+            padding: '4px 11px',
             textAlign: 'center',
-            backdropFilter: 'blur(4px)',
+            backdropFilter: 'blur(6px)',
             whiteSpace: 'nowrap',
+            boxShadow: `0 2px 12px ${l.color}22`,
           }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: l.color, fontFamily: 'Inter, sans-serif' }}>{l.text}</div>
-            <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.8)', fontFamily: 'Inter, sans-serif' }}>{l.sub}</div>
+            <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.85)', fontFamily: 'Inter, sans-serif' }}>{l.sub}</div>
           </div>
         </Html>
       ))}
@@ -428,7 +431,7 @@ function CameraController({ cubeMode, size }) {
 /* ══════════════════════════════════════════════════
    Scene
    ══════════════════════════════════════════════════ */
-function Scene({ arista, showParts, cubeMode, waterLevel }) {
+function Scene({ arista, activeParts, cubeMode, waterLevel }) {
   const size        = toScene(arista)
   const isAssembled = cubeMode === 'assembled'
 
@@ -450,7 +453,7 @@ function Scene({ arista, showParts, cubeMode, waterLevel }) {
 
       <CameraController cubeMode={cubeMode} size={size} />
 
-      <AssembledCube size={size} waterLevel={waterLevel} showParts={showParts} visible={isAssembled} />
+      <AssembledCube size={size} waterLevel={waterLevel} activeParts={activeParts} visible={isAssembled} />
 
       {/* SIEMPRE montado: oculto en modo armado, visible en exploded/net */}
       <CubeFaces size={size} mode={cubeMode} />
@@ -461,7 +464,7 @@ function Scene({ arista, showParts, cubeMode, waterLevel }) {
 /* ══════════════════════════════════════════════════
    CubeScene — Canvas exportado
    ══════════════════════════════════════════════════ */
-export default function CubeScene({ arista, showParts, cubeMode, waterLevel }) {
+export default function CubeScene({ arista, activeParts, cubeMode, waterLevel }) {
   return (
     <Canvas
       shadows
@@ -470,7 +473,7 @@ export default function CubeScene({ arista, showParts, cubeMode, waterLevel }) {
       style={{ background: 'linear-gradient(135deg, #060b18 0%, #0d1424 100%)' }}
     >
       <Suspense fallback={null}>
-        <Scene arista={arista} showParts={showParts} cubeMode={cubeMode} waterLevel={waterLevel} />
+        <Scene arista={arista} activeParts={activeParts} cubeMode={cubeMode} waterLevel={waterLevel} />
       </Suspense>
     </Canvas>
   )
