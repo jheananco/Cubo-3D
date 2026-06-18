@@ -12,105 +12,130 @@ const FACE_COLORS = ['#60a5fa', '#818cf8', '#34d399', '#fb923c', '#f472b6', '#a7
 const FACE_NAMES  = ['Frente', 'Atrás', 'Derecha', 'Izquierda', 'Superior', 'Inferior']
 
 /* ══════════════════════════════════════════════════
-   Rotaciones FIJAS de cada cara — nunca cambian para
-   los modos assembled/exploded (igual que en CSS):
-
-     .frente   { transform: translateZ(100px) }
-     .atras    { transform: rotateY(180deg) translateZ(100px) }
-     .derecha  { transform: rotateY(90deg)  translateZ(100px) }
+   Rotaciones FIJAS por cara (patrón CSS):
+     .frente   { transform: translateZ(s/2) }
+     .atras    { transform: rotateY(180deg) translateZ(s/2) }
      ...
-
-   Los grupos THREE tienen estas rotaciones y NUNCA
-   se animan en el modo explosión — solo cambia el Z
-   del mesh hijo. Para la red plana sí cambian.
+   Los grupos THREE tienen estas rotaciones; la explosión
+   solo anima el Z del mesh hijo (igual que CSS translateZ).
    ══════════════════════════════════════════════════ */
 const FACE_ROTATIONS = [
-  [0,              0, 0], // 0 Frente    — sin rotación
-  [0,    Math.PI,   0], // 1 Atrás     — 180° en Y
-  [0, -Math.PI / 2,  0], // 2 Derecha   — -90° en Y
-  [0,  Math.PI / 2,  0], // 3 Izquierda — +90° en Y
-  [-Math.PI / 2,    0, 0], // 4 Superior  — -90° en X
-  [ Math.PI / 2,    0, 0], // 5 Inferior  — +90° en X
+  [0,              0, 0], // 0 Frente
+  [0,    Math.PI,   0], // 1 Atrás
+  [0, -Math.PI / 2,  0], // 2 Derecha
+  [0,  Math.PI / 2,  0], // 3 Izquierda
+  [-Math.PI / 2,    0, 0], // 4 Superior
+  [ Math.PI / 2,    0, 0], // 5 Inferior
 ]
 
 /* ══════════════════════════════════════════════════
-   Datos de animación por modo.
+   targetData — posición del grupo y translateZ del mesh
 
-   Arquitectura de jerarquía (espejo del CSS):
-     faceGroup(position, rotation)
-       └── mesh(position.z = translateZ análogo)
+   ASSEMBLED / EXPLODED:
+     groupPos = [0,0,0]   (grupo siempre en el origen)
+     groupRot = FACE_ROTATIONS[i]   (nunca cambia)
+     meshZ    = s/2 ó s*2.8   (solo esto cambia — idéntico a CSS)
 
-   assembled → groups en origen, rotaciones fijas, z = s/2
-   exploded  → groups en origen, rotaciones fijas, z = s*2.8
-               (¡SOLO CAMBIA Z! idéntico a CSS translateZ)
-   net       → groups reposicionados y girados a plano,
-               z = 0 (la cara queda centrada en el grupo)
+   NET (desarme tipo "caja que se abre"):
+     La cara INFERIOR es el ancla central en y = -s/2.
+     Las otras 4 caras laterales se giran 90° alrededor
+     de la arista que comparten con la Inferior.
+     El resultado visual coincide con la imagen:
+
+           [Sup(0,-s/2,-s)]
+     [Izq] [Inf(0,-s/2, 0)] [Der] [Atr(2s)]
+           [Fre(0,-s/2, s)]
+
+     Todas las caras quedan planas a y = -s/2.
    ══════════════════════════════════════════════════ */
 function targetData(mode, size) {
+  const s = size
+
   if (mode === 'assembled') {
     return FACE_ROTATIONS.map(rot => ({
       groupPos: [0, 0, 0],
       groupRot: rot,
-      meshZ: size / 2,
+      meshZ: s / 2,
     }))
   }
 
   if (mode === 'exploded') {
-    /* Patrón CSS: misma rotación, solo translateZ aumenta */
+    /* CSS: misma rotación, solo translateZ aumenta → caras vuelan en dirección de su normal */
     return FACE_ROTATIONS.map(rot => ({
       groupPos: [0, 0, 0],
       groupRot: rot,
-      meshZ: size * 2.8,
+      meshZ: s * 2.8,
     }))
   }
 
   if (mode === 'net') {
-    /* Cruz canónica en plano XZ (Y=0)
-         [Sup(0,0,-s)]
-   [Izq] [Fren] [Der] [Atrás]
-         [Inf(0,0,s)]         */
+    /* Caja abriéndose: Inferior como ancla, caras giradas 90° sobre sus aristas.
+       Todas en Y = -s/2 (nivel del suelo del cubo). */
     const flat = [-Math.PI / 2, 0, 0]
-    const positions = [
-      [0,         0, 0      ], // 0 Frente (ancla)
-      [size * 2,  0, 0      ], // 1 Atrás
-      [size,      0, 0      ], // 2 Derecha
-      [-size,     0, 0      ], // 3 Izquierda
-      [0,         0, -size  ], // 4 Superior
-      [0,         0,  size  ], // 5 Inferior
+    const y    = -s / 2
+    return [
+      { groupPos: [0,      y,  s   ], groupRot: flat, meshZ: 0 }, // 0 Frente → delante de Inf
+      { groupPos: [2 * s,  y,  0   ], groupRot: flat, meshZ: 0 }, // 1 Atrás  → derecha de Der
+      { groupPos: [s,      y,  0   ], groupRot: flat, meshZ: 0 }, // 2 Derecha → derecha de Inf
+      { groupPos: [-s,     y,  0   ], groupRot: flat, meshZ: 0 }, // 3 Izquierda → izq de Inf
+      { groupPos: [0,      y, -s   ], groupRot: flat, meshZ: 0 }, // 4 Superior → arriba de Inf
+      { groupPos: [0,      y,  0   ], groupRot: flat, meshZ: 0 }, // 5 Inferior → ANCLA
     ]
-    return positions.map(pos => ({
-      groupPos: pos,
-      groupRot: flat,
-      meshZ: 0, // sin offset: la cara queda centrada en el grupo
-    }))
   }
 
   return targetData('assembled', size)
 }
 
 /* ══════════════════════════════════════════════════
-   Easing (equivalente a las timing-functions de CSS)
+   Hinge math para el modo NET.
+   Cada cara lateral gira 90° alrededor de la arista
+   que comparte con la Inferior (igual que una caja
+   que se abre). Esto produce trayectoria en arco,
+   no en línea recta — coincide con la imagen.
+
+   Hinge pos: borde de la Inferior en la dirección
+              donde va cada cara.
+   Hinge axis: dirección del borde (X o Z).
+   Angle: PI/2 (caen hacia afuera).
    ══════════════════════════════════════════════════ */
-const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
-const easeOutBack    = t => {
-  const c1 = 1.70158, c3 = c1 + 1
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2)
+function getHinge(idx, size) {
+  const s  = size
+  const y  = -s / 2
+  switch (idx) {
+    case 0: return { pos: new THREE.Vector3(0,  y,  s/2), axis: new THREE.Vector3(1, 0, 0), angle:  Math.PI/2 } // Frente
+    case 1: return null // Atrás — posición directa (segundo nivel)
+    case 2: return { pos: new THREE.Vector3( s/2, y, 0), axis: new THREE.Vector3(0, 0, 1), angle: -Math.PI/2 } // Derecha
+    case 3: return { pos: new THREE.Vector3(-s/2, y, 0), axis: new THREE.Vector3(0, 0, 1), angle:  Math.PI/2 } // Izquierda
+    case 4: return { pos: new THREE.Vector3(0,  y, -s/2), axis: new THREE.Vector3(1, 0, 0), angle: -Math.PI/2 } // Superior
+    case 5: return null // Inferior — ancla, no se mueve
+    default: return null
+  }
 }
-const easeOutCubic   = t => 1 - Math.pow(1 - t, 3)
 
 /* ══════════════════════════════════════════════════
-   Delays por cara (análogo a transition-delay en CSS)
+   Easing
+   ══════════════════════════════════════════════════ */
+const easeInOutCubic = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2
+const easeOutBack    = t => { const c1=1.70158,c3=c1+1; return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2) }
+const easeOutCubic   = t => 1 - Math.pow(1-t, 3)
+
+/* ══════════════════════════════════════════════════
+   Delays y duraciones por modo.
    [0=Fren, 1=Atrás, 2=Der, 3=Izq, 4=Sup, 5=Inf]
 
-   Explosión: Frente primero, Atrás al final
-   Red plana: Frente como ancla, Atrás al final
-   Armado:    Todo regresa casi simultáneamente
+   EXPLOSIÓN: Frente primero, Atrás al final.
+   NET (caja abriéndose):
+     0) Inferior queda fija (delay 0)
+     1) Frente y Superior caen (delay 0.10)
+     2) Derecha e Izquierda caen (delay 0.30)
+     3) Atrás se desliza al final (delay 0.55)
+   ARMADO: regreso rápido simultáneo.
    ══════════════════════════════════════════════════ */
 const DELAY_EXPLODED  = [0.00, 0.50, 0.10, 0.20, 0.30, 0.40]
 const DUR_EXPLODED    = 0.62
 
-const DELAY_NET       = [0.00, 1.15, 0.68, 0.90, 0.23, 0.45]
-const DUR_NET         = 0.56
+const DELAY_NET       = [0.10, 0.55, 0.30, 0.30, 0.10, 0.00]
+const DUR_NET         = 0.58
 
 const DELAY_ASSEMBLED = [0.00, 0.00, 0.05, 0.05, 0.10, 0.10]
 const DUR_ASSEMBLED   = 0.52
@@ -118,17 +143,15 @@ const DUR_ASSEMBLED   = 0.52
 /* ══════════════════════════════════════════════════
    CubeFaces — 6 caras animadas (SIEMPRE MONTADO)
 
-   Jerarquía Three.js que espeja el patrón CSS:
-     <group ref={faceGroupRefs[i]}>   ← rotación fija
-       <mesh ref={meshRefs[i]}>       ← position.z varía
-         <planeGeometry>
-         <Html>  ← sigue al mesh automáticamente
-       </mesh>
-     </group>
+   Jerarquía:
+     <group ref={faceGroupRefs[i]}>   ← pos + rot animados
+       <mesh ref={meshRefs[i]}>        ← position.z = translateZ CSS
+         <Html>                         ← sigue al mesh automáticamente
 
-   Para EXPLOSIÓN: solo meshZ cambia (groupPos=[0,0,0],
-   groupRot fijo). Idéntico a translateZ en CSS.
-   Para RED PLANA: groupPos y groupRot cambian, meshZ→0.
+   EXPLOSIÓN: solo meshZ cambia (grupos en origen, rot fija).
+   NET: grupos se reposicionan con trayectoria en arco
+        (hinge math) + meshZ → 0.
+   ARMADO: todo regresa rápidamente.
    ══════════════════════════════════════════════════ */
 function CubeFaces({ size, mode }) {
   const active        = mode !== 'assembled'
@@ -136,14 +159,14 @@ function CubeFaces({ size, mode }) {
   const meshRefs      = useRef([])
 
   const animStart      = useRef(null)
-  const startGroupPos  = useRef(Array.from({ length: 6 }, () => new THREE.Vector3()))
-  const startGroupQuat = useRef(Array.from({ length: 6 }, () => new THREE.Quaternion()))
+  const startGroupPos  = useRef(Array.from({length:6}, () => new THREE.Vector3()))
+  const startGroupQuat = useRef(Array.from({length:6}, () => new THREE.Quaternion()))
   const startMeshZ     = useRef(new Float32Array(6))
-  const targetGroupPos = useRef(Array.from({ length: 6 }, () => new THREE.Vector3()))
-  const targetGroupQuat= useRef(Array.from({ length: 6 }, () => new THREE.Quaternion()))
+  const targetGroupPos = useRef(Array.from({length:6}, () => new THREE.Vector3()))
+  const targetGroupQuat= useRef(Array.from({length:6}, () => new THREE.Quaternion()))
   const targetMeshZ    = useRef(new Float32Array(6))
 
-  /* Establece posición inicial ANTES del primer rAF (sin flash en origen) */
+  /* Posición correcta antes del primer rAF → sin flash en origen */
   useLayoutEffect(() => {
     const data = targetData('assembled', size)
     faceGroupRefs.current.forEach((ref, i) => {
@@ -166,7 +189,7 @@ function CubeFaces({ size, mode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* Al cambiar modo o arista: captura estado actual → actualiza targets → arranca reloj */
+  /* Al cambiar modo o arista */
   useEffect(() => {
     faceGroupRefs.current.forEach((ref, i) => {
       if (!ref) return
@@ -177,21 +200,18 @@ function CubeFaces({ size, mode }) {
       if (!ref) return
       startMeshZ.current[i] = ref.position.z
     })
-
     const data = targetData(mode, size)
     data.forEach((d, i) => {
       targetGroupPos.current[i].set(...d.groupPos)
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...d.groupRot))
-      // Garantiza que slerp tome el camino más corto
       if (startGroupQuat.current[i].dot(q) < 0) q.negate()
       targetGroupQuat.current[i].copy(q)
       targetMeshZ.current[i] = d.meshZ
     })
-
     animStart.current = performance.now()
   }, [mode, size])
 
-  /* Animación por frame: lerpVectors + slerpQuaternions + lerp de Z */
+  /* Animación por frame */
   useFrame(() => {
     if (!animStart.current) return
     const elapsed = (performance.now() - animStart.current) / 1000
@@ -212,23 +232,36 @@ function CubeFaces({ size, mode }) {
 
       const fg = faceGroupRefs.current[i]
       const m  = meshRefs.current[i]
+      if (!fg || !m) continue
 
-      if (fg) {
-        fg.position.lerpVectors(
-          startGroupPos.current[i],
-          targetGroupPos.current[i],
-          eased,
-        )
-        fg.quaternion.slerpQuaternions(
-          startGroupQuat.current[i],
-          targetGroupQuat.current[i],
-          eased,
-        )
-      }
+      /* ── Modo NET: trayectoria en arco sobre la arista (hinge) ── */
+      if (mode === 'net') {
+        const hinge = getHinge(i, size)
+        if (hinge) {
+          /* Calcula posición en arco: la cara gira alrededor de la arista
+             de la Inferior como una tapa de caja abriéndose. */
+          const angle = hinge.angle * eased
+          const q     = new THREE.Quaternion().setFromAxisAngle(hinge.axis, angle)
 
-      if (m) {
-        m.position.z = startMeshZ.current[i] +
-          (targetMeshZ.current[i] - startMeshZ.current[i]) * eased
+          /* Posición inicial de la cara en el espacio del hinge */
+          const relStart = startGroupPos.current[i].clone().sub(hinge.pos)
+          relStart.applyQuaternion(q)
+          fg.position.copy(hinge.pos).add(relStart)
+
+          /* Rotación: assembled rot + rotación del hinge */
+          fg.quaternion.copy(q).multiply(startGroupQuat.current[i])
+        } else {
+          /* Inferior (ancla) y Atrás: posición directa (lerp normal) */
+          fg.position.lerpVectors(startGroupPos.current[i], targetGroupPos.current[i], eased)
+          fg.quaternion.slerpQuaternions(startGroupQuat.current[i], targetGroupQuat.current[i], eased)
+        }
+        /* meshZ → 0 durante el desplegado */
+        m.position.z = startMeshZ.current[i] * (1 - eased)
+      } else {
+        /* ── EXPLOSIÓN / ARMADO: CSS mirror (solo Z cambia) ── */
+        fg.position.lerpVectors(startGroupPos.current[i], targetGroupPos.current[i], eased)
+        fg.quaternion.slerpQuaternions(startGroupQuat.current[i], targetGroupQuat.current[i], eased)
+        m.position.z = startMeshZ.current[i] + (targetMeshZ.current[i] - startMeshZ.current[i]) * eased
       }
     }
   })
@@ -237,8 +270,6 @@ function CubeFaces({ size, mode }) {
     <group visible={active}>
       {FACE_ROTATIONS.map((_, i) => (
         <group key={i} ref={el => { faceGroupRefs.current[i] = el }}>
-          {/* El mesh actúa como el `translateZ` de CSS.
-              Html es hijo del mesh → lo sigue automáticamente */}
           <mesh ref={el => { meshRefs.current[i] = el }}>
             <planeGeometry args={[size, size]} />
             <meshStandardMaterial
@@ -276,7 +307,7 @@ function CubeFaces({ size, mode }) {
 }
 
 /* ══════════════════════════════════════════════════
-   AssembledCube — cubo sólido con agua y partes
+   AssembledCube
    ══════════════════════════════════════════════════ */
 function AssembledCube({ size, waterLevel, showParts, visible }) {
   const hasWater = waterLevel > 0.001
@@ -301,7 +332,7 @@ function AssembledCube({ size, waterLevel, showParts, visible }) {
 }
 
 /* ══════════════════════════════════════════════════
-   WaterMesh — agua que sube desde la base
+   WaterMesh
    ══════════════════════════════════════════════════ */
 function WaterMesh({ size, level }) {
   const safe   = Math.max(level, 0.001)
@@ -313,16 +344,10 @@ function WaterMesh({ size, level }) {
       <mesh scale={[size * 0.985, scaleY, size * 0.985]}>
         <boxGeometry args={[1, 1, 1]} />
         <meshStandardMaterial
-          color="#1d4ed8"
-          emissive="#0ea5e9"
-          emissiveIntensity={0.13}
-          transparent
-          opacity={0.65}
-          roughness={0.05}
-          metalness={0.15}
+          color="#1d4ed8" emissive="#0ea5e9" emissiveIntensity={0.13}
+          transparent opacity={0.65} roughness={0.05} metalness={0.15}
         />
       </mesh>
-      {/* Superficie del agua */}
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, scaleY / 2 + 0.001, 0]}
@@ -330,13 +355,8 @@ function WaterMesh({ size, level }) {
       >
         <planeGeometry args={[1, 1]} />
         <meshStandardMaterial
-          color="#38bdf8"
-          emissive="#0ea5e9"
-          emissiveIntensity={0.3}
-          transparent
-          opacity={0.6}
-          roughness={0}
-          metalness={0.2}
+          color="#38bdf8" emissive="#0ea5e9" emissiveIntensity={0.3}
+          transparent opacity={0.6} roughness={0} metalness={0.2}
         />
       </mesh>
     </group>
@@ -344,17 +364,17 @@ function WaterMesh({ size, level }) {
 }
 
 /* ══════════════════════════════════════════════════
-   PartsLabels — etiquetas HTML sobre el cubo armado
+   PartsLabels
    ══════════════════════════════════════════════════ */
 function PartsLabels({ size }) {
   const s = size
   const labels = [
-    { pos: [0,           0,            s * 0.72], text: 'Cara',      color: '#60a5fa', sub: '6 caras iguales' },
-    { pos: [s * 0.70,    s * 0.55,    0        ], text: 'Arista',    color: '#34d399', sub: '12 aristas' },
-    { pos: [s * 0.62,    s * 0.62,    s * 0.62 ], text: 'Vértice',  color: '#f472b6', sub: '8 vértices' },
-    { pos: [0,           -s * 0.74,   0        ], text: 'Base',      color: '#a78bfa', sub: 'Cara inferior' },
-    { pos: [s * 0.74,    0,           0        ], text: 'Altura = a',color: '#fb923c', sub: `${(s * 5).toFixed(1)} cm` },
-    { pos: [-s * 0.55,   s * 0.55,   -s * 0.55 ], text: 'Diagonal', color: '#fbbf24', sub: 'a√3' },
+    { pos: [0,          0,           s*0.72], text: 'Cara',       color: '#60a5fa', sub: '6 caras iguales' },
+    { pos: [s*0.70,     s*0.55,      0     ], text: 'Arista',     color: '#34d399', sub: '12 aristas' },
+    { pos: [s*0.62,     s*0.62,      s*0.62], text: 'Vértice',   color: '#f472b6', sub: '8 vértices' },
+    { pos: [0,         -s*0.74,      0     ], text: 'Base',       color: '#a78bfa', sub: 'Cara inferior' },
+    { pos: [s*0.74,     0,           0     ], text: 'Altura = a', color: '#fb923c', sub: `${(s*5).toFixed(1)} cm` },
+    { pos: [-s*0.55,    s*0.55,     -s*0.55], text: 'Diagonal',  color: '#fbbf24', sub: 'a√3' },
   ]
   return (
     <>
@@ -369,12 +389,8 @@ function PartsLabels({ size }) {
             backdropFilter: 'blur(4px)',
             whiteSpace: 'nowrap',
           }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: l.color, fontFamily: 'Inter, sans-serif' }}>
-              {l.text}
-            </div>
-            <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.8)', fontFamily: 'Inter, sans-serif' }}>
-              {l.sub}
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: l.color, fontFamily: 'Inter, sans-serif' }}>{l.text}</div>
+            <div style={{ fontSize: 9, color: 'rgba(148,163,184,0.8)', fontFamily: 'Inter, sans-serif' }}>{l.sub}</div>
           </div>
         </Html>
       ))}
@@ -383,7 +399,7 @@ function PartsLabels({ size }) {
 }
 
 /* ══════════════════════════════════════════════════
-   CameraController — ajusta la vista al cambiar modo
+   CameraController
    ══════════════════════════════════════════════════ */
 function CameraController({ cubeMode, size }) {
   const { camera } = useThree()
@@ -392,8 +408,10 @@ function CameraController({ cubeMode, size }) {
   useEffect(() => {
     if (prevMode.current === cubeMode) return
     if (cubeMode === 'net') {
+      /* Vista desde arriba y al frente para ver la cruz completa.
+         La cruz se extiende de x=-s a x=2s, z=-s a z=s, centrada en (0.5s, -s/2, 0) */
       camera.position.set(size * 0.5, size * 9, size * 4)
-      camera.lookAt(size * 0.5, 0, 0)
+      camera.lookAt(size * 0.5, -size / 2, 0)
     } else if (cubeMode === 'assembled') {
       camera.position.set(size * 3, size * 2.5, size * 4)
       camera.lookAt(0, 0, 0)
@@ -408,7 +426,7 @@ function CameraController({ cubeMode, size }) {
 }
 
 /* ══════════════════════════════════════════════════
-   Scene — grafo completo de Three.js
+   Scene
    ══════════════════════════════════════════════════ */
 function Scene({ arista, showParts, cubeMode, waterLevel }) {
   const size        = toScene(arista)
@@ -417,43 +435,24 @@ function Scene({ arista, showParts, cubeMode, waterLevel }) {
   return (
     <>
       <ambientLight intensity={0.55} />
-      <directionalLight
-        position={[8, 12, 6]}
-        intensity={1.8}
-        castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
-      />
+      <directionalLight position={[8, 12, 6]} intensity={1.8} castShadow
+        shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
       <pointLight position={[-6, -6, -4]} intensity={0.7} color="#818cf8" />
       <pointLight position={[6,  -4,  6]} intensity={0.4} color="#06b6d4" />
 
       <gridHelper
-        args={[24, 24, 'rgba(59,130,246,0.07)', 'rgba(59,130,246,0.03)']}
+        args={[28, 28, 'rgba(59,130,246,0.07)', 'rgba(59,130,246,0.03)']}
         position={[0, -size * 0.5 - 0.01, 0]}
       />
 
-      <OrbitControls
-        makeDefault
-        enablePan={false}
-        minDistance={0.5}
-        maxDistance={22}
-        enableDamping
-        dampingFactor={0.07}
-      />
+      <OrbitControls makeDefault enablePan={false} minDistance={0.5} maxDistance={28}
+        enableDamping dampingFactor={0.07} />
 
       <CameraController cubeMode={cubeMode} size={size} />
 
-      {/* Cubo sólido: visible solo en modo armado */}
-      <AssembledCube
-        size={size}
-        waterLevel={waterLevel}
-        showParts={showParts}
-        visible={isAssembled}
-      />
+      <AssembledCube size={size} waterLevel={waterLevel} showParts={showParts} visible={isAssembled} />
 
-      {/* Las 6 caras — SIEMPRE en escena.
-          visible={false} cuando está armado: animación silenciosa
-          de regreso a posición de cubo, lista para próxima explosión. */}
+      {/* SIEMPRE montado: oculto en modo armado, visible en exploded/net */}
       <CubeFaces size={size} mode={cubeMode} />
     </>
   )
@@ -466,17 +465,12 @@ export default function CubeScene({ arista, showParts, cubeMode, waterLevel }) {
   return (
     <Canvas
       shadows
-      camera={{ position: [3, 2.5, 4], fov: 50, near: 0.01, far: 120 }}
+      camera={{ position: [3, 2.5, 4], fov: 50, near: 0.01, far: 140 }}
       gl={{ antialias: true, alpha: false }}
       style={{ background: 'linear-gradient(135deg, #060b18 0%, #0d1424 100%)' }}
     >
       <Suspense fallback={null}>
-        <Scene
-          arista={arista}
-          showParts={showParts}
-          cubeMode={cubeMode}
-          waterLevel={waterLevel}
-        />
+        <Scene arista={arista} showParts={showParts} cubeMode={cubeMode} waterLevel={waterLevel} />
       </Suspense>
     </Canvas>
   )
